@@ -7,7 +7,6 @@ import {
   FileSearch,
   Fingerprint,
   LockKeyhole,
-  Mail,
   Network,
   Shield,
   ShieldAlert,
@@ -76,6 +75,7 @@ function App() {
   const starttls = session?.starttls;
 
   const riskLabel = posture?.risk?.label || "Unknown";
+
   const riskConfidence = posture?.risk?.confidence
     ? `${(posture.risk.confidence * 100).toFixed(2)}%`
     : "—";
@@ -83,7 +83,11 @@ function App() {
   const score = posture?.security?.score ?? 0;
 
   const scoreClass =
-    score >= 70 ? "score-good" : score >= 40 ? "score-warning" : "score-danger";
+    score >= 70
+      ? "score-good"
+      : score >= 40
+        ? "score-warning"
+        : "score-danger";
 
   const tlsVersion =
     tls?.negotiated_tls_version ||
@@ -123,7 +127,14 @@ function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <div className="ambient ambient-one" />
+      <div className="ambient ambient-two" />
+      <div className="ambient ambient-three" />
+
+      <div className="background-grid" />
+      <div className="background-scanline" />
+
+      <aside className="sidebar glass-panel">
         <div className="brand">
           <div className="brand-mark">
             <Shield size={18} />
@@ -181,8 +192,10 @@ function App() {
       </aside>
 
       <main className="main-content">
-        <header className="topbar">
-          <div className="topbar-title">SECURITY OPERATIONS</div>
+        <header className="topbar glass-bar">
+          <div className="topbar-title">
+            SECURITY OPERATIONS
+          </div>
 
           <div className="topbar-right">
             <div className="operational-badge">
@@ -198,22 +211,35 @@ function App() {
 
         <div className="page">
           <div className="page-heading">
+            <div className="heading-kicker">
+              <span className="kicker-line" />
+              PASSIVE NETWORK FORENSICS
+            </div>
+
             <h1>Security Overview</h1>
+
             <p>
               Analyze email traffic and identify cryptographic weaknesses from
               passive network captures.
             </p>
           </div>
 
-          <section className="upload-panel">
+          <section className="upload-panel glass-featured">
+            <div className="upload-glow" />
+
             <div className="upload-content">
               <div className="upload-copy">
                 <div className="upload-icon">
                   <Upload size={23} />
                 </div>
 
-                <div>
+                <div className="upload-copy-text">
+                  <div className="micro-label">
+                    CAPTURE ANALYSIS
+                  </div>
+
                   <h2>Analyze a network capture</h2>
+
                   <p>
                     Upload a PCAP or PCAPNG file containing SMTP, IMAP, or POP3
                     traffic.
@@ -240,10 +266,18 @@ function App() {
                 </button>
               </div>
             </div>
+
+            <div className="upload-decoration">
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
           </section>
 
           {error && (
-            <div className="error-panel">
+            <div className="error-panel glass-panel">
               <AlertTriangle size={17} />
 
               <div>
@@ -254,9 +288,15 @@ function App() {
           )}
 
           {!analysis && !loading && !error && (
-            <section className="empty-state">
-              <div className="empty-icon">
-                <FileSearch size={25} />
+            <section className="empty-state glass-panel">
+              <div className="empty-orbit">
+                <div className="empty-icon">
+                  <FileSearch size={25} />
+                </div>
+              </div>
+
+              <div className="empty-kicker">
+                READY FOR CAPTURE
               </div>
 
               <h2>No PCAP analyzed yet</h2>
@@ -266,7 +306,10 @@ function App() {
                 assessment.
               </p>
 
-              <button className="empty-button" onClick={openFilePicker}>
+              <button
+                className="empty-button"
+                onClick={openFilePicker}
+              >
                 <Upload size={13} />
                 Upload your first PCAP
                 <ArrowRight size={13} />
@@ -275,9 +318,18 @@ function App() {
           )}
 
           {loading && (
-            <section className="empty-state loading-state">
-              <div className="empty-icon loading-icon">
-                <Activity size={25} />
+            <section className="empty-state loading-state glass-panel">
+              <div className="analysis-loader">
+                <div className="loader-ring">
+                  <Activity size={24} />
+                </div>
+
+                <span className="loader-orbit orbit-one" />
+                <span className="loader-orbit orbit-two" />
+              </div>
+
+              <div className="empty-kicker">
+                ANALYSIS ENGINE ACTIVE
               </div>
 
               <h2>Analyzing network capture</h2>
@@ -286,12 +338,16 @@ function App() {
                 Reconstructing sessions, inspecting TLS and evaluating
                 cryptographic security.
               </p>
+
+              <div className="loading-progress">
+                <span />
+              </div>
             </section>
           )}
 
           {analysis && session && (
             <>
-              <div className="analysis-meta">
+              <div className="analysis-meta glass-panel">
                 <div>
                   <span>Capture</span>
                   <strong title={analysis.filename}>
@@ -316,7 +372,9 @@ function App() {
               </div>
 
               <div className="overview-grid">
-                <section className={`card score-card ${scoreClass}`}>
+                <section
+                  className={`card score-card glass-panel ${scoreClass}`}
+                >
                   <div className="score-card-inner">
                     <div
                       className="score-ring"
@@ -324,6 +382,8 @@ function App() {
                         "--score-angle": `${score * 3.6}deg`,
                       }}
                     >
+                      <div className="score-ring-glow" />
+
                       <div className="score-value">
                         <strong>{score}</strong>
                         <span>Security score</span>
@@ -356,25 +416,37 @@ function App() {
                 </section>
 
                 <div className="metric-grid">
-                  <div className="metric-card">
+                  <div className="metric-card glass-panel">
                     <div className="metric-top">
-                      <span className="metric-label">TLS Version</span>
+                      <span className="metric-label">
+                        TLS Version
+                      </span>
+
                       <LockKeyhole
                         size={14}
                         className="metric-icon"
                       />
                     </div>
 
-                    <div className="metric-value">{tlsVersion}</div>
+                    <div className="metric-value">
+                      {tlsVersion}
+                    </div>
+
                     <div className="metric-sub">
                       Negotiated protocol version
                     </div>
                   </div>
 
-                  <div className="metric-card">
+                  <div className="metric-card glass-panel">
                     <div className="metric-top">
-                      <span className="metric-label">Cipher Suite</span>
-                      <Shield size={14} className="metric-icon" />
+                      <span className="metric-label">
+                        Cipher Suite
+                      </span>
+
+                      <Shield
+                        size={14}
+                        className="metric-icon"
+                      />
                     </div>
 
                     <div className="metric-value">
@@ -386,10 +458,16 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="metric-card">
+                  <div className="metric-card glass-panel">
                     <div className="metric-top">
-                      <span className="metric-label">Key Exchange</span>
-                      <Network size={14} className="metric-icon" />
+                      <span className="metric-label">
+                        Key Exchange
+                      </span>
+
+                      <Network
+                        size={14}
+                        className="metric-icon"
+                      />
                     </div>
 
                     <div className="metric-value">
@@ -397,13 +475,17 @@ function App() {
                     </div>
 
                     <div className="metric-sub">
-                      Forward secrecy: {forwardSecrecy ? "Yes" : "No"}
+                      Forward secrecy:{" "}
+                      {forwardSecrecy ? "Yes" : "No"}
                     </div>
                   </div>
 
-                  <div className="metric-card">
+                  <div className="metric-card glass-panel">
                     <div className="metric-top">
-                      <span className="metric-label">Certificate</span>
+                      <span className="metric-label">
+                        Certificate
+                      </span>
+
                       <Fingerprint
                         size={14}
                         className="metric-icon"
@@ -412,14 +494,19 @@ function App() {
 
                     <div
                       className={`metric-value ${
-                        certificateValid ? "good-text" : "bad-text"
+                        certificateValid
+                          ? "good-text"
+                          : "bad-text"
                       }`}
                     >
-                      {certificateValid ? "Valid" : "Issue detected"}
+                      {certificateValid
+                        ? "Valid"
+                        : "Issue detected"}
                     </div>
 
                     <div className="metric-sub">
-                      {certificate?.public_key_algorithm || "Unknown"}{" "}
+                      {certificate?.public_key_algorithm ||
+                        "Unknown"}{" "}
                       {keySize}
                     </div>
                   </div>
@@ -427,12 +514,13 @@ function App() {
               </div>
 
               <div className="section-grid">
-                <section className="card">
+                <section className="card glass-panel">
                   <div className="card-header">
                     <div>
                       <div className="section-eyebrow">
                         CRYPTOGRAPHIC ANALYSIS
                       </div>
+
                       <h3>Security Configuration</h3>
                     </div>
 
@@ -442,7 +530,10 @@ function App() {
                   <div className="config-list">
                     <ConfigRow
                       label="Protocol"
-                      value={features?.protocol || session.protocol}
+                      value={
+                        features?.protocol ||
+                        session.protocol
+                      }
                     />
 
                     <ConfigRow
@@ -461,7 +552,9 @@ function App() {
                       label="Cipher suite"
                       value={cipher}
                       valueClass={
-                        cipher.includes("CBC") ? "bad" : "good"
+                        cipher.includes("CBC")
+                          ? "bad"
+                          : "good"
                       }
                     />
 
@@ -469,7 +562,9 @@ function App() {
                       label="Key exchange"
                       value={keyExchange}
                       valueClass={
-                        keyExchange === "RSA" ? "bad" : "good"
+                        keyExchange === "RSA"
+                          ? "bad"
+                          : "good"
                       }
                     />
 
@@ -480,7 +575,10 @@ function App() {
 
                     <ConfigRow
                       label="Certificate signature"
-                      value={certificate?.signature_algorithm || "Unknown"}
+                      value={
+                        certificate?.signature_algorithm ||
+                        "Unknown"
+                      }
                       valueClass={
                         certificate?.signature_algorithm
                           ?.toLowerCase()
@@ -492,12 +590,13 @@ function App() {
                   </div>
                 </section>
 
-                <section className="card">
+                <section className="card glass-panel">
                   <div className="card-header">
                     <div>
                       <div className="section-eyebrow">
                         TRANSPORT SECURITY
                       </div>
+
                       <h3>TLS & STARTTLS Posture</h3>
                     </div>
 
@@ -507,17 +606,29 @@ function App() {
                   <div className="config-list">
                     <ConfigRow
                       label="STARTTLS advertised"
-                      value={starttls?.starttls_supported ? "Detected" : "Not detected"}
+                      value={
+                        starttls?.starttls_supported
+                          ? "Detected"
+                          : "Not detected"
+                      }
                       valueClass={
-                        starttls?.starttls_supported ? "good" : "bad"
+                        starttls?.starttls_supported
+                          ? "good"
+                          : "bad"
                       }
                     />
 
                     <ConfigRow
                       label="STARTTLS requested"
-                      value={starttls?.starttls_requested ? "Yes" : "No"}
+                      value={
+                        starttls?.starttls_requested
+                          ? "Yes"
+                          : "No"
+                      }
                       valueClass={
-                        starttls?.starttls_requested ? "good" : "bad"
+                        starttls?.starttls_requested
+                          ? "good"
+                          : "bad"
                       }
                     />
 
@@ -529,14 +640,24 @@ function App() {
                           : "Not detected"
                       }
                       valueClass={
-                        starttlsDetected ? "good" : "bad"
+                        starttlsDetected
+                          ? "good"
+                          : "bad"
                       }
                     />
 
                     <ConfigRow
                       label="Forward secrecy"
-                      value={forwardSecrecy ? "Enabled" : "Not provided"}
-                      valueClass={forwardSecrecy ? "good" : "bad"}
+                      value={
+                        forwardSecrecy
+                          ? "Enabled"
+                          : "Not provided"
+                      }
+                      valueClass={
+                        forwardSecrecy
+                          ? "good"
+                          : "bad"
+                      }
                     />
 
                     <ConfigRow
@@ -547,7 +668,9 @@ function App() {
                           : "Invalid / unavailable"
                       }
                       valueClass={
-                        certificateValid ? "good" : "bad"
+                        certificateValid
+                          ? "good"
+                          : "bad"
                       }
                     />
 
@@ -568,12 +691,13 @@ function App() {
                 </section>
               </div>
 
-              <section className="card ai-card">
+              <section className="card ai-card glass-panel">
                 <div className="card-header">
                   <div>
                     <div className="section-eyebrow">
                       MACHINE LEARNING
                     </div>
+
                     <h3>AI Security Assessment</h3>
                   </div>
 
@@ -589,8 +713,10 @@ function App() {
 
                       <div>
                         <strong>{riskLabel} Risk</strong>
+
                         <span>
-                          ML classification confidence: {riskConfidence}
+                          ML classification confidence:{" "}
+                          {riskConfidence}
                         </span>
                       </div>
                     </div>
@@ -598,13 +724,17 @@ function App() {
                     <div className="confidence">
                       <div className="confidence-head">
                         <span>Confidence</span>
+
                         <strong>{riskConfidence}</strong>
                       </div>
 
                       <div className="confidence-bar">
                         <span
                           style={{
-                            width: `${(posture?.risk?.confidence || 0) * 100}%`,
+                            width: `${
+                              (posture?.risk?.confidence || 0) *
+                              100
+                            }%`,
                           }}
                         />
                       </div>
@@ -612,7 +742,9 @@ function App() {
 
                     <div
                       className={`anomaly-status ${
-                        posture?.anomaly?.is_anomaly ? "anomaly" : ""
+                        posture?.anomaly?.is_anomaly
+                          ? "anomaly"
+                          : ""
                       }`}
                     >
                       {posture?.anomaly?.is_anomaly ? (
@@ -632,12 +764,13 @@ function App() {
               </section>
 
               <div className="section-grid">
-                <section className="card">
+                <section className="card glass-panel">
                   <div className="card-header">
                     <div>
                       <div className="section-eyebrow">
                         FORENSIC FINDINGS
                       </div>
+
                       <h3>Security Findings</h3>
                     </div>
 
@@ -652,13 +785,19 @@ function App() {
                       </div>
                     ) : (
                       findings.map((finding, index) => (
-                        <div className="finding" key={index}>
+                        <div
+                          className="finding"
+                          key={index}
+                        >
                           <div className="finding-icon">
                             <AlertTriangle size={14} />
                           </div>
 
                           <div className="finding-content">
-                            <strong>Security weakness detected</strong>
+                            <strong>
+                              Security weakness detected
+                            </strong>
+
                             <p>{finding}</p>
                           </div>
                         </div>
@@ -667,12 +806,13 @@ function App() {
                   </div>
                 </section>
 
-                <section className="card">
+                <section className="card glass-panel">
                   <div className="card-header">
                     <div>
                       <div className="section-eyebrow">
                         REMEDIATION
                       </div>
+
                       <h3>Recommendations</h3>
                     </div>
 
@@ -686,18 +826,23 @@ function App() {
                         No recommendations required.
                       </div>
                     ) : (
-                      recommendations.map((recommendation, index) => (
-                        <div
-                          className="recommendation"
-                          key={index}
-                        >
-                          <div className="recommendation-number">
-                            {String(index + 1).padStart(2, "0")}
-                          </div>
+                      recommendations.map(
+                        (recommendation, index) => (
+                          <div
+                            className="recommendation"
+                            key={index}
+                          >
+                            <div className="recommendation-number">
+                              {String(index + 1).padStart(
+                                2,
+                                "0"
+                              )}
+                            </div>
 
-                          <p>{recommendation}</p>
-                        </div>
-                      ))
+                            <p>{recommendation}</p>
+                          </div>
+                        )
+                      )
                     )}
                   </div>
                 </section>
@@ -705,12 +850,14 @@ function App() {
 
               <div className="analysis-footer">
                 <span>
-                  Passive network forensic analysis • No traffic modification
+                  Passive network forensic analysis • No traffic
+                  modification
                 </span>
 
                 <strong>
                   {analysis.session_count} email session
-                  {analysis.session_count === 1 ? "" : "s"} analyzed
+                  {analysis.session_count === 1 ? "" : "s"}{" "}
+                  analyzed
                 </strong>
               </div>
             </>
@@ -721,10 +868,17 @@ function App() {
   );
 }
 
-function ConfigRow({ label, value, valueClass = "" }) {
+function ConfigRow({
+  label,
+  value,
+  valueClass = "",
+}) {
   return (
     <div className="config-row">
-      <span className="config-label">{label}</span>
+      <span className="config-label">
+        {label}
+      </span>
+
       <strong className={`config-value ${valueClass}`}>
         {value}
       </strong>
