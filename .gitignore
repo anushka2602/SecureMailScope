@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.venv/
+backend/venv/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# TLS private keys
+*.key
+*.pem
+
+# Captured network traffic
+*.pcap
+*.pcapng
+*.cap
+
+# Generated reports
+reports/
+*.html
+*.pdf
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+
+# Logs
+*.log
