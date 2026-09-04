@@ -1,12 +1,4 @@
 def calculate_security_score(data):
-    """
-    Calculate a deterministic cryptographic security score.
-
-    Score:
-        0   = best
-        100 = worst
-    """
-
     score = 0
     findings = []
     recommendations = []
@@ -19,22 +11,18 @@ def calculate_security_score(data):
 
     if tls_version == "TLS1.0":
         score += 35
-
         findings.append(
             "Deprecated TLS 1.0 is in use."
         )
-
         recommendations.append(
             "Disable TLS 1.0 and require TLS 1.2 or TLS 1.3."
         )
 
     elif tls_version == "TLS1.1":
         score += 25
-
         findings.append(
             "Deprecated TLS 1.1 is in use."
         )
-
         recommendations.append(
             "Disable TLS 1.1 and require TLS 1.2 or TLS 1.3."
         )
@@ -47,11 +35,9 @@ def calculate_security_score(data):
 
     else:
         score += 20
-
         findings.append(
             "Unknown or unsupported TLS version detected."
         )
-
         recommendations.append(
             "Verify the TLS configuration and use TLS 1.2 or TLS 1.3."
         )
@@ -63,13 +49,10 @@ def calculate_security_score(data):
     cipher = data.get("cipher")
 
     if cipher == "3DES":
-
         score += 30
-
         findings.append(
             "3DES is a weak/deprecated cipher."
         )
-
         recommendations.append(
             "Disable 3DES and use AES-GCM or ChaCha20-Poly1305."
         )
@@ -78,19 +61,35 @@ def calculate_security_score(data):
         "AES_128_CBC",
         "AES_256_CBC",
     ]:
-
         score += 15
-
         findings.append(
             "CBC-mode cipher suite detected."
         )
-
         recommendations.append(
             "Prefer modern AEAD cipher suites such as AES-GCM or ChaCha20-Poly1305."
         )
 
     # --------------------------------------------------
-    # KEY SIZE
+    # KEY EXCHANGE
+    # --------------------------------------------------
+
+    key_exchange = data.get(
+        "key_exchange"
+    )
+
+    if key_exchange == "RSA":
+        score += 15
+
+        findings.append(
+            "RSA key exchange is in use and does not provide forward secrecy."
+        )
+
+        recommendations.append(
+            "Prefer ephemeral key exchange mechanisms such as ECDHE or DHE."
+        )
+
+    # --------------------------------------------------
+    # PUBLIC KEY SIZE
     # --------------------------------------------------
 
     key_size = data.get("key_size")
@@ -98,7 +97,6 @@ def calculate_security_score(data):
     if key_size is not None:
 
         if key_size < 2048:
-
             score += 25
 
             findings.append(
@@ -110,15 +108,13 @@ def calculate_security_score(data):
             )
 
         elif key_size == 2048:
-
             score += 3
 
     # --------------------------------------------------
-    # CERTIFICATE
+    # CERTIFICATE VALIDITY
     # --------------------------------------------------
 
     if data.get("cert_expired"):
-
         score += 30
 
         findings.append(
@@ -130,7 +126,6 @@ def calculate_security_score(data):
         )
 
     if data.get("cert_not_yet_valid"):
-
         score += 25
 
         findings.append(
@@ -142,30 +137,42 @@ def calculate_security_score(data):
         )
 
     # --------------------------------------------------
-    # SIGNATURE ALGORITHM
+    # CERTIFICATE SIGNATURE
     # --------------------------------------------------
 
     signature_algorithm = data.get(
         "signature_algorithm"
     )
 
-    if signature_algorithm == "SHA1":
+    if signature_algorithm:
 
-        score += 25
-
-        findings.append(
-            "SHA-1 certificate signature detected."
+        normalized_signature = (
+            signature_algorithm.upper()
         )
 
-        recommendations.append(
-            "Replace SHA-1 certificates with SHA-256 or stronger signatures."
-        )
+        if normalized_signature in {
+            "SHA1",
+            "SHA-1",
+        }:
+
+            score += 25
+
+            findings.append(
+                "SHA-1 certificate signature detected."
+            )
+
+            recommendations.append(
+                "Replace SHA-1 certificates with SHA-256 or stronger signatures."
+            )
 
     # --------------------------------------------------
     # STARTTLS
     # --------------------------------------------------
 
-    direct_tls = data.get("direct_tls", 0)
+    direct_tls = data.get(
+        "direct_tls",
+        0,
+    )
 
     if (
         data.get("starttls") == 0
@@ -186,7 +193,16 @@ def calculate_security_score(data):
     # FORWARD SECRECY
     # --------------------------------------------------
 
-    if data.get("forward_secrecy") == 0:
+    forward_secrecy = data.get(
+        "forward_secrecy"
+    )
+
+    # Only add the generic forward-secrecy finding
+    # when the key exchange did not already explain it.
+    if (
+        forward_secrecy == 0
+        and key_exchange != "RSA"
+    ):
 
         score += 15
 
@@ -199,7 +215,7 @@ def calculate_security_score(data):
         )
 
     # --------------------------------------------------
-    # LIMIT SCORE
+    # SCORE NORMALIZATION
     # --------------------------------------------------
 
     score = min(

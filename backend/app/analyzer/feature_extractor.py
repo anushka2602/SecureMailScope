@@ -68,7 +68,11 @@ def is_direct_tls_protocol(protocol):
     if not protocol:
         return False
 
-    return protocol.upper() in {"SMTPS", "IMAPS", "POP3S"}
+    return protocol.upper() in {
+        "SMTPS",
+        "IMAPS",
+        "POP3S",
+    }
 
 
 def extract_certificate_from_pcap(pcap_path, tcp_stream=None):
@@ -118,7 +122,9 @@ def extract_certificate_from_pcap(pcap_path, tcp_stream=None):
     ]
 
     if not certificate_hex_values:
-        return {}
+        return {
+            "certificate_present": False,
+        }
 
     # TShark can expose multiple certificates.
     # For the current MVP we analyze the first certificate,
@@ -126,7 +132,9 @@ def extract_certificate_from_pcap(pcap_path, tcp_stream=None):
     certificate_hex = certificate_hex_values[0]
 
     try:
-        certificate_bytes = bytes.fromhex(certificate_hex)
+        certificate_bytes = bytes.fromhex(
+            certificate_hex
+        )
     except ValueError:
         return {
             "certificate_present": False,
@@ -134,7 +142,9 @@ def extract_certificate_from_pcap(pcap_path, tcp_stream=None):
         }
 
     try:
-        return analyze_certificate(certificate_bytes)
+        return analyze_certificate(
+            certificate_bytes
+        )
     except Exception as error:
         return {
             "certificate_present": False,
@@ -148,7 +158,22 @@ def build_security_features(
     starttls_result,
     certificate_result=None,
 ):
+    """
+    Build the normalized security feature object used by
+    the rule engine and ML models.
+
+    This function intentionally keeps the normalized feature
+    representation simple while preserving the detailed TLS
+    analysis separately in the session object.
+    """
+
     certificate_result = certificate_result or {}
+    starttls_result = starttls_result or {}
+    tls_result = tls_result or {}
+
+    # --------------------------------------------------
+    # TLS NEGOTIATION
+    # --------------------------------------------------
 
     negotiated_tls_version = tls_result.get(
         "negotiated_tls_version"
@@ -158,11 +183,22 @@ def build_security_features(
         "negotiated_cipher_suite"
     )
 
+    key_exchange = tls_result.get(
+        "key_exchange"
+    )
+
+    key_exchange_group = tls_result.get(
+        "key_exchange_group"
+    )
+
     forward_secrecy = tls_result.get(
         "forward_secrecy"
     )
 
-    # Normalize TLS version names.
+    # --------------------------------------------------
+    # NORMALIZE TLS VERSION
+    # --------------------------------------------------
+
     tls_version_map = {
         "TLS 1.0": "TLS1.0",
         "TLS 1.1": "TLS1.1",
@@ -175,7 +211,10 @@ def build_security_features(
         negotiated_tls_version,
     )
 
-    # Normalize cipher names for the ML/risk-engine feature format.
+    # --------------------------------------------------
+    # NORMALIZE CIPHER
+    # --------------------------------------------------
+
     cipher = negotiated_cipher
 
     if cipher == "TLS_AES_128_GCM_SHA256":
@@ -199,12 +238,28 @@ def build_security_features(
     elif cipher == "TLS_RSA_WITH_AES_256_CBC_SHA256":
         cipher = "AES_256_CBC"
 
+    # --------------------------------------------------
+    # STARTTLS / DIRECT TLS
+    # --------------------------------------------------
+
     starttls = 1 if (
         starttls_result.get("tls_upgrade_detected")
         or starttls_result.get("starttls_requested")
     ) else 0
 
-    direct_tls = 1 if is_direct_tls_protocol(protocol) else 0
+    direct_tls = (
+        1
+        if is_direct_tls_protocol(protocol)
+        else 0
+    )
+
+    # --------------------------------------------------
+    # CERTIFICATE FEATURES
+    # --------------------------------------------------
+
+    public_key_algorithm = certificate_result.get(
+        "public_key_algorithm"
+    )
 
     key_size = certificate_result.get(
         "public_key_length"
@@ -222,15 +277,33 @@ def build_security_features(
         "signature_algorithm"
     )
 
+    # --------------------------------------------------
+    # NORMALIZED SECURITY FEATURES
+    # --------------------------------------------------
+
     features = {
         "protocol": normalize_protocol(protocol),
+
         "tls_version": tls_version,
+
         "cipher": cipher,
+
+        "key_exchange": key_exchange,
+
+        "key_exchange_group": key_exchange_group,
+
+        "public_key_algorithm": public_key_algorithm,
+
         "key_size": key_size,
+
         "cert_expired": cert_expired,
+
         "cert_not_yet_valid": cert_not_yet_valid,
+
         "signature_algorithm": signature_algorithm,
+
         "starttls": starttls,
+
         "forward_secrecy": (
             1
             if forward_secrecy is True
@@ -238,6 +311,7 @@ def build_security_features(
             if forward_secrecy is False
             else None
         ),
+
         "direct_tls": direct_tls,
     }
 
@@ -245,6 +319,29 @@ def build_security_features(
 
 
 def extract_features_from_pcap(pcap_path):
+    """
+    Extract normalized security features from all detected
+    email-related TCP streams in a PCAP.
+
+    Pipeline:
+
+        PCAP
+          ↓
+        TCP stream reconstruction
+          ↓
+        Email protocol detection
+          ↓
+        Payload decoding
+          ↓
+        TLS analysis
+          ↓
+        STARTTLS analysis
+          ↓
+        Certificate extraction
+          ↓
+        Normalized security features
+    """
+
     pcap_path = Path(pcap_path)
 
     if not pcap_path.exists():
@@ -252,20 +349,44 @@ def extract_features_from_pcap(pcap_path):
             f"PCAP file not found: {pcap_path}"
         )
 
-    streams = reconstruct_tcp_streams(str(pcap_path))
+    # --------------------------------------------------
+    # RECONSTRUCT TCP STREAMS
+    # --------------------------------------------------
+
+    streams = reconstruct_tcp_streams(
+        str(pcap_path)
+    )
 
     all_sessions = []
 
+    # --------------------------------------------------
+    # ANALYZE EACH STREAM
+    # --------------------------------------------------
+
     for stream_id, stream in streams.items():
 
-        protocol = detect_email_protocol_from_stream(stream)
+        protocol = detect_email_protocol_from_stream(
+            stream
+        )
 
         if protocol is None:
             continue
 
-        normalized_protocol = normalize_protocol(protocol)
+        normalized_protocol = normalize_protocol(
+            protocol
+        )
 
-        payloads = decode_stream_payloads(stream)
+        # --------------------------------------------------
+        # DECODE APPLICATION PAYLOAD
+        # --------------------------------------------------
+
+        payloads = decode_stream_payloads(
+            stream
+        )
+
+        # --------------------------------------------------
+        # TLS ANALYSIS
+        # --------------------------------------------------
 
         tls_result = analyze_tls_packets(
             str(pcap_path),
@@ -277,21 +398,34 @@ def extract_features_from_pcap(pcap_path):
             False,
         )
 
+        # --------------------------------------------------
+        # STARTTLS ANALYSIS
+        # --------------------------------------------------
+
         starttls_result = analyze_starttls(
             normalized_protocol,
             payloads,
             tls_detected=tls_detected,
         )
 
-        # Extract and analyze the X.509 certificate
-        # observed in this TLS stream.
+        # --------------------------------------------------
+        # CERTIFICATE ANALYSIS
+        # --------------------------------------------------
+
         certificate_result = {}
 
         if tls_detected:
-            certificate_result = extract_certificate_from_pcap(
-                str(pcap_path),
-                tcp_stream=stream_id,
+
+            certificate_result = (
+                extract_certificate_from_pcap(
+                    str(pcap_path),
+                    tcp_stream=stream_id,
+                )
             )
+
+        # --------------------------------------------------
+        # NORMALIZED SECURITY FEATURES
+        # --------------------------------------------------
 
         features = build_security_features(
             protocol=protocol,
@@ -300,15 +434,25 @@ def extract_features_from_pcap(pcap_path):
             certificate_result=certificate_result,
         )
 
+        # --------------------------------------------------
+        # SESSION OBJECT
+        # --------------------------------------------------
+
         all_sessions.append(
             {
                 "stream_id": stream_id,
+
                 "protocol": normalized_protocol,
+
                 "features": features,
+
                 "tls": tls_result,
+
                 "starttls": starttls_result,
+
                 "certificate": certificate_result,
             }
         )
 
     return all_sessions
+

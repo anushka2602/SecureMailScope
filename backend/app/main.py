@@ -3,6 +3,7 @@ import shutil
 import tempfile
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.analyzer.feature_extractor import extract_features_from_pcap
 from app.security.security_posture import analyze_security_posture
@@ -12,6 +13,19 @@ app = FastAPI(
     title="SecureMailScope",
     description="AI-Assisted Cryptographic Security Posture Assessment for Secure Email Communications",
     version="0.1.0",
+)
+
+
+# Allow the React/Vite frontend to communicate with FastAPI.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -69,7 +83,7 @@ async def analyze_pcap(file: UploadFile = File(...)):
 
             shutil.copyfileobj(
                 file.file,
-                temp_file,
+                temp_file
             )
 
         sessions = extract_features_from_pcap(

@@ -123,6 +123,43 @@ def _cipher_name(value):
     )
 
 
+def _key_exchange_from_cipher(cipher):
+    """
+    Infer the key-exchange mechanism from the negotiated
+    TLS cipher suite.
+
+    For TLS 1.2 and older cipher suites, the cipher suite
+    name explicitly contains the key-exchange family.
+
+    For TLS 1.3, the cipher suite no longer identifies the
+    key-exchange mechanism, so we return a generic TLS 1.3
+    label. The actual TLS 1.3 group is reported separately
+    through key_exchange_group.
+    """
+
+    if not cipher:
+        return None
+
+    cipher_upper = cipher.upper()
+
+    if "_RSA_" in cipher_upper:
+        return "RSA"
+
+    if "_ECDHE_" in cipher_upper:
+        return "ECDHE"
+
+    if "_DHE_" in cipher_upper:
+        return "DHE"
+
+    if cipher_upper.startswith("TLS_AES_"):
+        return "TLS 1.3 key exchange"
+
+    if cipher_upper.startswith("TLS_CHACHA20_"):
+        return "TLS 1.3 key exchange"
+
+    return None
+
+
 def _group_name(value):
     value = str(value).strip()
 
@@ -173,6 +210,7 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         "negotiated_tls_version": None,
         "cipher_suites": [],
         "negotiated_cipher_suite": None,
+        "key_exchange": None,
         "handshake_types": [],
         "supported_groups": [],
         "key_exchange_groups": [],
@@ -368,6 +406,20 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
                     )
                 )
 
+                # --------------------------------------------------
+                # KEY EXCHANGE
+                # --------------------------------------------------
+
+                negotiated_cipher = (
+                    result["negotiated_cipher_suite"]
+                )
+
+                result["key_exchange"] = (
+                    _key_exchange_from_cipher(
+                        negotiated_cipher
+                    )
+                )
+
         # --------------------------------------------------
         # KEY EXCHANGE GROUP
         # --------------------------------------------------
@@ -512,3 +564,4 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         result["forward_secrecy"] = False
 
     return result
+
