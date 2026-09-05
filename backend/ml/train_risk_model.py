@@ -91,7 +91,30 @@ for index, label in enumerate(label_encoder.classes_):
 
 
 # --------------------------------------------------
-# Identify feature types
+# Train / test split
+# --------------------------------------------------
+#
+# IMPORTANT:
+# We split the raw data BEFORE fitting the preprocessor.
+# This prevents information from the test set leaking
+# into the preprocessing stage.
+# --------------------------------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y_encoded,
+    test_size=0.20,
+    random_state=42,
+    stratify=y_encoded,
+)
+
+
+print("\nTraining samples:", X_train.shape[0])
+print("Testing samples:", X_test.shape[0])
+
+
+# --------------------------------------------------
+# Feature definitions
 # --------------------------------------------------
 
 categorical_features = [
@@ -139,37 +162,44 @@ preprocessor = ColumnTransformer(
         ),
         (
             "numeric",
-            "passthrough",
+            Pipeline(
+                steps=[
+                    (
+                        "imputer",
+                        SimpleImputer(
+                            strategy="median"
+                        ),
+                    ),
+                ]
+            ),
             numeric_features,
         ),
     ]
 )
 
 
-X_processed = preprocessor.fit_transform(X)
+# --------------------------------------------------
+# Fit preprocessor ONLY on training data
+# --------------------------------------------------
+
+X_train_processed = preprocessor.fit_transform(
+    X_train
+)
+
+X_test_processed = preprocessor.transform(
+    X_test
+)
 
 
 print(
-    f"\nProcessed feature shape: "
-    f"{X_processed.shape}"
+    f"\nProcessed training feature shape: "
+    f"{X_train_processed.shape}"
 )
 
-
-# --------------------------------------------------
-# Train / test split
-# --------------------------------------------------
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X_processed,
-    y_encoded,
-    test_size=0.20,
-    random_state=42,
-    stratify=y_encoded,
+print(
+    f"Processed testing feature shape: "
+    f"{X_test_processed.shape}"
 )
-
-
-print("\nTraining samples:", X_train.shape[0])
-print("Testing samples:", X_test.shape[0])
 
 
 # --------------------------------------------------
@@ -179,9 +209,9 @@ print("Testing samples:", X_test.shape[0])
 print("\nTraining XGBoost model...")
 
 model = XGBClassifier(
-    n_estimators=200,
-    max_depth=6,
-    learning_rate=0.08,
+    n_estimators=400,
+    max_depth=5,
+    learning_rate=0.05,
     subsample=0.85,
     colsample_bytree=0.85,
     objective="multi:softprob",
@@ -192,7 +222,7 @@ model = XGBClassifier(
 
 
 model.fit(
-    X_train,
+    X_train_processed,
     y_train,
 )
 
@@ -201,7 +231,9 @@ model.fit(
 # Predictions
 # --------------------------------------------------
 
-y_pred = model.predict(X_test)
+y_pred = model.predict(
+    X_test_processed
+)
 
 
 # --------------------------------------------------

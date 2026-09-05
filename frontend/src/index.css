@@ -3,7 +3,7 @@
 }
 
 html {
-  background: #07111f;
+  background: #1c140e;
 }
 
 body {
@@ -18,7 +18,8 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  background: #07111f;
+  background: #1c140e;
+  color: #f7f3e3;
 }
 
 button,
@@ -33,6 +34,6 @@ button {
 }
 
 ::selection {
-  background: #164f65;
-  color: #ffffff;
+  background: #370e07;
+  color: #f7f3e3;
 }

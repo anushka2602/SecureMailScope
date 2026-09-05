@@ -162,14 +162,28 @@ def build_security_features(
     Build the normalized security feature object used by
     the rule engine and ML models.
 
-    This function intentionally keeps the normalized feature
-    representation simple while preserving the detailed TLS
-    analysis separately in the session object.
+    The ML feature schema remains compatible with the current
+    trained models.
+
+    Additional forensic fields such as tls_detected,
+    key_exchange, and key_exchange_group are retained for
+    rule-based security analysis and reporting.
     """
 
     certificate_result = certificate_result or {}
     starttls_result = starttls_result or {}
     tls_result = tls_result or {}
+
+    # --------------------------------------------------
+    # TLS STATE
+    # --------------------------------------------------
+
+    tls_detected = bool(
+        tls_result.get(
+            "tls_detected",
+            False,
+        )
+    )
 
     # --------------------------------------------------
     # TLS NEGOTIATION
@@ -226,6 +240,12 @@ def build_security_features(
     elif cipher == "TLS_CHACHA20_POLY1305_SHA256":
         cipher = "CHACHA20_POLY1305"
 
+    elif cipher == "TLS_AES_128_CCM_SHA256":
+        cipher = "AES_128_CCM"
+
+    elif cipher == "TLS_AES_128_CCM_8_SHA256":
+        cipher = "AES_128_CCM_8"
+
     elif cipher == "TLS_RSA_WITH_AES_128_CBC_SHA":
         cipher = "AES_128_CBC"
 
@@ -236,6 +256,65 @@ def build_security_features(
         cipher = "AES_128_CBC"
 
     elif cipher == "TLS_RSA_WITH_AES_256_CBC_SHA256":
+        cipher = "AES_256_CBC"
+
+    # ECDHE + AES-GCM
+    elif cipher in {
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+    }:
+        cipher = "AES_128_GCM"
+
+    elif cipher in {
+        "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+    }:
+        cipher = "AES_256_GCM"
+
+    # ECDHE + AES-CBC
+    elif cipher in {
+        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA",
+        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256",
+    }:
+        cipher = "AES_128_CBC"
+
+    elif cipher in {
+        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+        "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA",
+        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+        "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
+    }:
+        cipher = "AES_256_CBC"
+
+    # ECDHE + ChaCha20
+    elif cipher in {
+        "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+    }:
+        cipher = "CHACHA20_POLY1305"
+
+    # DHE + AES-GCM
+    elif cipher in {
+        "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",
+    }:
+        cipher = "AES_128_GCM"
+
+    elif cipher in {
+        "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+    }:
+        cipher = "AES_256_GCM"
+
+    # DHE + AES-CBC
+    elif cipher in {
+        "TLS_DHE_RSA_WITH_AES_128_CBC_SHA",
+    }:
+        cipher = "AES_128_CBC"
+
+    elif cipher in {
+        "TLS_DHE_RSA_WITH_AES_256_CBC_SHA",
+    }:
         cipher = "AES_256_CBC"
 
     # --------------------------------------------------
@@ -284,10 +363,14 @@ def build_security_features(
     features = {
         "protocol": normalize_protocol(protocol),
 
+        # TLS state is now explicitly preserved.
+        "tls_detected": tls_detected,
+
         "tls_version": tls_version,
 
         "cipher": cipher,
 
+        # Forensic/rule-engine features.
         "key_exchange": key_exchange,
 
         "key_exchange_group": key_exchange_group,
@@ -393,9 +476,11 @@ def extract_features_from_pcap(pcap_path):
             tcp_stream=stream_id,
         )
 
-        tls_detected = tls_result.get(
-            "tls_detected",
-            False,
+        tls_detected = bool(
+            tls_result.get(
+                "tls_detected",
+                False,
+            )
         )
 
         # --------------------------------------------------
@@ -455,4 +540,3 @@ def extract_features_from_pcap(pcap_path):
         )
 
     return all_sessions
-

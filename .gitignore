@@ -41,3 +41,7 @@ Thumbs.db
 
 # Logs
 *.log
+# Local analysis/report outputs
+analysis.json
+securemailscope_report.json
+securemailscope_report.pdf
