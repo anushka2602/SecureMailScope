@@ -240,19 +240,35 @@ function App() {
     features?.key_size ||
     "Not detected";
 
-  const starttlsDetected =
-    starttls?.tls_upgrade_detected === true ||
-    features?.starttls === 1;
+  const starttlsUpgradeDetected =
+    typeof starttls?.tls_upgrade_detected === "boolean"
+      ? starttls.tls_upgrade_detected
+      : typeof starttls?.encrypted_after_starttls === "boolean"
+        ? starttls.encrypted_after_starttls
+        : null;
 
   const forwardSecrecy =
     tls?.forward_secrecy === true ||
-    features?.forward_secrecy === 1;
+    tls?.forward_secrecy === 1 ||
+    (tls?.forward_secrecy == null &&
+      (features?.forward_secrecy === true ||
+        features?.forward_secrecy === 1))
+      ? true
+      : tls?.forward_secrecy === false ||
+          tls?.forward_secrecy === 0 ||
+          (tls?.forward_secrecy == null &&
+            (features?.forward_secrecy === false ||
+              features?.forward_secrecy === 0))
+        ? false
+        : null;
 
   const forwardSecrecyLabel = !tlsDetected
     ? "Not applicable"
-    : forwardSecrecy
+    : forwardSecrecy === true
       ? "Yes"
-      : "No";
+      : forwardSecrecy === false
+        ? "No"
+        : "Not determined";
 
   const certificatePresent =
     certificate?.certificate_present === true;
@@ -264,7 +280,45 @@ function App() {
 
   const findings = Array.isArray(posture?.findings)
     ? posture.findings
+        .map((finding) => {
+          if (typeof finding === "string") {
+            return {
+              type: "weakness",
+              message: finding,
+            };
+          }
+
+          if (
+            finding &&
+            typeof finding.message === "string"
+          ) {
+            return {
+              type: [
+                "weakness",
+                "observation",
+                "visibility",
+              ].includes(finding.type)
+                ? finding.type
+                : "weakness",
+              message: finding.message,
+            };
+          }
+
+          return null;
+        })
+        .filter(Boolean)
     : [];
+
+  const getFindingLabel = (findingType) => {
+    switch (findingType) {
+      case "observation":
+        return "Security observation";
+      case "visibility":
+        return "Visibility limitation";
+      default:
+        return "Security weakness detected";
+    }
+  };
 
   const recommendations = Array.isArray(
     posture?.recommendations
@@ -681,6 +735,56 @@ function App() {
                   <strong>Complete</strong>
                 </div>
               </div>
+
+              <section className="report-access card glass-panel">
+                <div className="card-header">
+                  <div>
+                    <div className="section-eyebrow">
+                      REPORTING
+                    </div>
+
+                    <h3>Analysis Reports</h3>
+                  </div>
+
+                  <FileSearch size={15} />
+                </div>
+
+                <p className="report-access-copy">
+                  Export the completed forensic assessment in
+                  the format that fits your workflow.
+                </p>
+
+                <div className="report-actions">
+                  <a
+                    className="report-action"
+                    href={`${API_URL}/report/json`}
+                    download="securemailscope_report.json"
+                  >
+                    <strong>JSON report</strong>
+                    <span>Download structured data</span>
+                  </a>
+
+                  <a
+                    className="report-action"
+                    href={`${API_URL}/report/html`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <strong>HTML report</strong>
+                    <span>Open browser-ready report</span>
+                  </a>
+
+                  <a
+                    className="report-action"
+                    href={`${API_URL}/report/pdf`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <strong>PDF report</strong>
+                    <span>Open printable report</span>
+                  </a>
+                </div>
+              </section>
 
               <section className="card glass-panel">
                 <div className="card-header">
@@ -1342,16 +1446,18 @@ function App() {
                         <ConfigRow
                           label="TLS upgrade"
                           value={
-                            starttlsDetected
+                            starttlsUpgradeDetected === true
                               ? "Successfully detected"
-                              : "Not detected"
+                              : starttlsUpgradeDetected === false
+                                ? "Not detected"
+                                : "Not determined"
                           }
                           valueClass={
-                            starttlsDetected
+                            starttlsUpgradeDetected === true
                               ? "good"
-                              : tlsDetected
-                                ? "good"
-                                : "bad"
+                              : starttlsUpgradeDetected === false
+                                ? "bad"
+                                : "warning"
                           }
                         />
 
@@ -1361,9 +1467,11 @@ function App() {
                           valueClass={
                             !tlsDetected
                               ? "warning"
-                              : forwardSecrecy
+                              : forwardSecrecy === true
                                 ? "good"
-                                : "bad"
+                                : forwardSecrecy === false
+                                  ? "bad"
+                                  : "warning"
                           }
                         />
 
@@ -1517,7 +1625,9 @@ function App() {
                           findings.map(
                             (finding, index) => (
                               <div
-                                className="finding"
+                                className={`finding ${
+                                  finding.type
+                                }`}
                                 key={`finding-${index}`}
                               >
                                 <div className="finding-icon">
@@ -1528,11 +1638,12 @@ function App() {
 
                                 <div className="finding-content">
                                   <strong>
-                                    Security weakness
-                                    detected
+                                    {getFindingLabel(
+                                      finding.type
+                                    )}
                                   </strong>
 
-                                  <p>{finding}</p>
+                                  <p>{finding.message}</p>
                                 </div>
                               </div>
                             )

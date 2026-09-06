@@ -3,6 +3,14 @@ def calculate_security_score(data):
     findings = []
     recommendations = []
 
+    def add_finding(finding_type, message):
+        findings.append(
+            {
+                "type": finding_type,
+                "message": message,
+            }
+        )
+
     # --------------------------------------------------
     # BASIC TLS STATE
     # --------------------------------------------------
@@ -15,13 +23,8 @@ def calculate_security_score(data):
     if tls_detected is None:
         tls_detected = tls_version is not None
 
-    direct_tls = data.get(
-        "direct_tls",
-        0,
-    )
-
-    starttls = data.get(
-        "starttls"
+    starttls_requested = (
+        data.get("starttls_requested") is True
     )
 
     # --------------------------------------------------
@@ -31,7 +34,8 @@ def calculate_security_score(data):
     if tls_version == "TLS1.0":
         score += 35
 
-        findings.append(
+        add_finding(
+            "weakness",
             "Deprecated TLS 1.0 is in use."
         )
 
@@ -42,7 +46,8 @@ def calculate_security_score(data):
     elif tls_version == "TLS1.1":
         score += 25
 
-        findings.append(
+        add_finding(
+            "weakness",
             "Deprecated TLS 1.1 is in use."
         )
 
@@ -59,7 +64,8 @@ def calculate_security_score(data):
     elif tls_detected:
         # TLS was observed, but a negotiated version could
         # not be established from the captured handshake.
-        findings.append(
+        add_finding(
+            "visibility",
             "TLS traffic was observed, but the negotiated TLS version could not be determined."
         )
 
@@ -72,7 +78,8 @@ def calculate_security_score(data):
         # email traffic, not an unknown TLS version.
         score += 30
 
-        findings.append(
+        add_finding(
+            "weakness",
             "No TLS protection was observed for this email session."
         )
 
@@ -91,7 +98,8 @@ def calculate_security_score(data):
     if cipher == "3DES":
         score += 30
 
-        findings.append(
+        add_finding(
+            "weakness",
             "3DES is a weak/deprecated cipher."
         )
 
@@ -105,7 +113,8 @@ def calculate_security_score(data):
     }:
         score += 15
 
-        findings.append(
+        add_finding(
+            "weakness",
             "CBC-mode cipher suite detected."
         )
 
@@ -124,7 +133,8 @@ def calculate_security_score(data):
     if key_exchange == "RSA":
         score += 15
 
-        findings.append(
+        add_finding(
+            "weakness",
             "RSA key exchange is in use and does not provide forward secrecy."
         )
 
@@ -136,16 +146,19 @@ def calculate_security_score(data):
     # PUBLIC KEY SIZE
     # --------------------------------------------------
 
+    # PUBLIC KEY SIZE (RSA only)
     key_size = data.get(
         "key_size"
     )
+    public_key_algorithm = data.get("public_key_algorithm")
 
-    if key_size is not None:
+    if key_size is not None and public_key_algorithm == "RSA":
 
         if key_size < 2048:
             score += 25
 
-            findings.append(
+            add_finding(
+                "weakness",
                 f"Weak public key size detected: {key_size} bits."
             )
 
@@ -166,7 +179,8 @@ def calculate_security_score(data):
 
         score += 30
 
-        findings.append(
+        add_finding(
+            "weakness",
             "TLS certificate is expired."
         )
 
@@ -178,7 +192,8 @@ def calculate_security_score(data):
 
         score += 25
 
-        findings.append(
+        add_finding(
+            "weakness",
             "TLS certificate is not yet valid."
         )
 
@@ -207,7 +222,8 @@ def calculate_security_score(data):
 
             score += 25
 
-            findings.append(
+            add_finding(
+                "weakness",
                 "SHA-1 certificate signature detected."
             )
 
@@ -222,7 +238,7 @@ def calculate_security_score(data):
     #
     # Important distinction:
     #
-    # 1. No TLS + no STARTTLS
+    # 1. No TLS + no STARTTLS request
     #    -> plaintext email; already penalized above.
     #
     # 2. STARTTLS requested + TLS detected
@@ -237,42 +253,20 @@ def calculate_security_score(data):
     #
 
     if (
-        starttls == 1
+        starttls_requested
         and not tls_detected
     ):
 
         score += 20
 
-        findings.append(
+        add_finding(
+            "weakness",
             "STARTTLS was requested, but no TLS traffic was observed after the upgrade request."
         )
 
         recommendations.append(
             "Verify that the STARTTLS negotiation completes successfully and that subsequent email traffic is encrypted."
         )
-
-    elif (
-        starttls == 0
-        and not tls_detected
-        and direct_tls != 1
-    ):
-
-        # Plaintext session.
-        #
-        # The main TLS absence penalty was already applied
-        # in the TLS-version section. Do not add another
-        # STARTTLS penalty here.
-        pass
-
-    elif (
-        starttls == 0
-        and tls_detected
-    ):
-
-        # TLS is already present. STARTTLS may not appear in
-        # the captured portion of the session, especially for
-        # direct TLS or captures beginning after the upgrade.
-        pass
 
     # --------------------------------------------------
     # FORWARD SECRECY
@@ -295,7 +289,8 @@ def calculate_security_score(data):
 
         score += 15
 
-        findings.append(
+        add_finding(
+            "weakness",
             "Forward secrecy was not observed."
         )
 
@@ -326,11 +321,12 @@ def calculate_security_score(data):
     ):
 
         if not any(
-            "negotiated TLS version" in finding
+            "negotiated TLS version" in finding["message"]
             for finding in findings
         ):
 
-            findings.append(
+            add_finding(
+                "visibility",
                 "TLS traffic was observed, but the handshake is incomplete and cryptographic parameters could not be verified."
             )
 

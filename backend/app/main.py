@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from app.analyzer.feature_extractor import extract_features_from_pcap
 from app.security.security_posture import analyze_security_posture
 from app.reports.report_generator import (
+    _get_certificate_status,
     build_report,
     report_to_json,
     report_to_html,
@@ -206,7 +207,6 @@ def export_pdf_report():
             getSampleStyleSheet,
         )
         from reportlab.lib.units import mm
-        from reportlab.pdfbase.pdfmetrics import stringWidth
         from reportlab.platypus import (
             SimpleDocTemplate,
             Paragraph,
@@ -214,7 +214,6 @@ def export_pdf_report():
             Table,
             TableStyle,
             KeepTogether,
-            PageBreak,
         )
 
         report = build_report(latest_analysis)
@@ -460,11 +459,11 @@ def export_pdf_report():
             return "Not determined"
 
         def fs_display(value):
-            if value is True:
+            if value is True or value == 1 or value == "Enabled":
                 return "Enabled"
 
-            if value is False:
-                return "Not enabled"
+            if value is False or value == 0 or value == "Disabled":
+                return "Disabled"
 
             return "Not determined"
 
@@ -532,6 +531,12 @@ def export_pdf_report():
                     "anomaly"
                 ) or {},
             }
+
+        def finding_message(finding):
+            if isinstance(finding, dict):
+                return finding.get("message") or "Unknown finding"
+
+            return finding
 
         def make_detail_table(
             rows,
@@ -1260,9 +1265,7 @@ def export_pdf_report():
                     item["score"]
                     or 0
                 ),
-                str(
-                    item["finding"]
-                ),
+                str(finding_message(item["finding"])),
             )
         )
 
@@ -1321,7 +1324,7 @@ def export_pdf_report():
                         ),
                         Paragraph(
                             display_value(
-                                item["finding"]
+                                finding_message(item["finding"])
                             ),
                             tiny_style,
                         ),
@@ -1623,27 +1626,7 @@ def export_pdf_report():
             # Certificate status
             # -----------------------------------------------------
 
-            if certificate.get(
-                "expired"
-            ) is True:
-
-                certificate_status = "Expired"
-
-            elif certificate.get(
-                "not_yet_valid"
-            ) is True:
-
-                certificate_status = "Not yet valid"
-
-            elif certificate.get(
-                "certificate_present"
-            ) is True:
-
-                certificate_status = "Valid"
-
-            else:
-
-                certificate_status = "Not observed"
+            certificate_status = _get_certificate_status(session)
 
             # -----------------------------------------------------
             # Security posture
@@ -1955,7 +1938,7 @@ def export_pdf_report():
                     Paragraph(
                         bool_display(
                             starttls.get(
-                                "tls_upgrade_detected"
+                                "encrypted_after_starttls"
                             )
                         ),
                         small_style,
@@ -2131,7 +2114,7 @@ def export_pdf_report():
 
                     finding_flowables.append(
                         Paragraph(
-                            f"• {display_value(finding)}",
+                            f"• {display_value(finding_message(finding))}",
                             finding_style,
                         )
                     )

@@ -3,7 +3,7 @@
 }
 
 html {
-  background: #1c140e;
+  background: #0d0b0f;
 }
 
 body {
@@ -11,6 +11,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   font-family:
+    "DM Sans",
     Inter,
     ui-sans-serif,
     system-ui,
@@ -18,8 +19,8 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  background: #1c140e;
-  color: #f7f3e3;
+  background: #0d0b0f;
+  color: #edeaf2;
 }
 
 button,
@@ -34,6 +35,6 @@ button {
 }
 
 ::selection {
-  background: #370e07;
-  color: #f7f3e3;
+  background: #50314c;
+  color: #ffffff;
 }

@@ -19,7 +19,7 @@ TLS_CIPHER_MAP = {
     "0x1304": "TLS_AES_128_CCM_SHA256",
     "0x1305": "TLS_AES_128_CCM_8_SHA256",
 
-    # TLS 1.2 / older RSA
+    # TLS 1.2 / RSA
     "0x002f": "TLS_RSA_WITH_AES_128_CBC_SHA",
     "0x0035": "TLS_RSA_WITH_AES_256_CBC_SHA",
     "0x003c": "TLS_RSA_WITH_AES_128_CBC_SHA256",
@@ -67,6 +67,12 @@ TLS_GROUP_MAP = {
 
 
 def _run_tshark(pcap_path, display_filter, fields):
+    """
+    Execute TShark and return tab-separated rows.
+
+    If TShark fails, raise a clear RuntimeError.
+    """
+
     command = [
         "tshark",
         "-r",
@@ -77,10 +83,15 @@ def _run_tshark(pcap_path, display_filter, fields):
         "fields",
         "-E",
         "separator=\t",
+        "-E",
+        "occurrence=a",
     ]
 
     for field in fields:
-        command.extend(["-e", field])
+        command.extend([
+            "-e",
+            field,
+        ])
 
     result = subprocess.run(
         command,
@@ -96,28 +107,46 @@ def _run_tshark(pcap_path, display_filter, fields):
     rows = []
 
     for line in result.stdout.splitlines():
+
         if not line.strip():
             continue
 
-        rows.append(line.split("\t"))
+        rows.append(
+            line.split("\t")
+        )
 
     return rows
 
 
 def _build_filter(base_filter, tcp_stream):
+    """
+    Restrict a TLS filter to one TCP stream when supplied.
+    """
+
     if tcp_stream is None:
         return base_filter
 
-    return f"tcp.stream == {tcp_stream} && ({base_filter})"
+    return (
+        f"tcp.stream == {tcp_stream} "
+        f"&& ({base_filter})"
+    )
 
 
 def _split_values(value):
+    """
+    Split TShark multi-value fields.
+
+    TShark can represent repeated values as comma-separated
+    values when occurrence=a is used.
+    """
+
     if value is None:
         return []
 
     values = []
 
     for item in str(value).split(","):
+
         item = item.strip()
 
         if item:
@@ -127,6 +156,10 @@ def _split_values(value):
 
 
 def _tls_version_name(value):
+    """
+    Convert a raw TLS version value into a readable name.
+    """
+
     if not value:
         return None
 
@@ -139,6 +172,10 @@ def _tls_version_name(value):
 
 
 def _cipher_name(value):
+    """
+    Convert a raw cipher-suite identifier into a readable name.
+    """
+
     if not value:
         return None
 
@@ -151,6 +188,18 @@ def _cipher_name(value):
 
 
 def _key_exchange_from_cipher(cipher):
+    """
+    Infer TLS 1.0-1.2 key-exchange mechanism from the
+    negotiated cipher suite.
+
+    Important:
+
+    ECDHE_RSA contains RSA because RSA is the authentication
+    algorithm, not the key-exchange mechanism.
+
+    Therefore ECDHE/DHE checks must occur before RSA.
+    """
+
     if not cipher:
         return None
 
@@ -165,16 +214,23 @@ def _key_exchange_from_cipher(cipher):
     if "_RSA_" in cipher_upper:
         return "RSA"
 
+    # TLS 1.3 cipher suites do not encode the key exchange.
     if cipher_upper.startswith("TLS_AES_"):
         return "TLS 1.3 key exchange"
 
-    if cipher_upper.startswith("TLS_CHACHA20_"):
+    if cipher_upper.startswith(
+        "TLS_CHACHA20_"
+    ):
         return "TLS 1.3 key exchange"
 
     return None
 
 
 def _group_name(value):
+    """
+    Convert a TLS supported-group identifier into a readable name.
+    """
+
     if value is None:
         return None
 
@@ -184,10 +240,19 @@ def _group_name(value):
         return None
 
     try:
-        group_id = int(value, 0)
+
+        group_id = int(
+            value,
+            0
+        )
 
     except ValueError:
-        return value
+
+        try:
+            group_id = int(value)
+
+        except ValueError:
+            return value
 
     return TLS_GROUP_MAP.get(
         group_id,
@@ -196,7 +261,13 @@ def _group_name(value):
 
 
 def _extract_last_value(value):
-    values = _split_values(value)
+    """
+    Return the final non-empty value from a TShark field.
+    """
+
+    values = _split_values(
+        value
+    )
 
     if not values:
         return None
@@ -204,32 +275,92 @@ def _extract_last_value(value):
     return values[-1].strip()
 
 
-def analyze_tls_packets(pcap_path, tcp_stream=None):
+def _counter_to_list(counter, mapper=None):
+    """
+    Convert a Counter into the standard result structure.
+    """
+
+    result = []
+
+    for value, count in counter.items():
+
+        mapped_value = (
+            mapper(value)
+            if mapper
+            else value
+        )
+
+        result.append(
+            {
+                "value": mapped_value,
+                "raw_value": value,
+                "packet_count": count,
+            }
+        )
+
+    return result
+
+
+def _is_tls13_cipher(cipher):
+    """
+    Determine whether a cipher is a TLS 1.3 cipher suite.
+    """
+
+    if not cipher:
+        return False
+
+    return cipher.upper().startswith(
+        (
+            "TLS_AES_",
+            "TLS_CHACHA20_",
+        )
+    )
+
+
+def analyze_tls_packets(
+    pcap_path,
+    tcp_stream=None,
+):
     """
     Analyze TLS traffic in a PCAP.
 
-    Forward secrecy is reported only when there is sufficient
-    evidence from the negotiated TLS version or negotiated
-    key-exchange mechanism.
+    If tcp_stream is supplied, analysis is restricted to
+    that TCP stream.
 
-    None means:
+    Forward secrecy:
 
-        TLS was observed, but forward secrecy could not be
-        determined from the available handshake evidence.
+        True
+            Sufficient negotiated-handshake evidence indicates
+            forward secrecy.
+
+        False
+            Sufficient evidence indicates a non-forward-secret
+            key exchange.
+
+        None
+            TLS was observed, but the available evidence is
+            insufficient to determine forward secrecy.
     """
 
     result = {
         "tls_detected": False,
         "tls_packet_count": 0,
+
         "tls_versions": [],
         "negotiated_tls_version": None,
+
         "cipher_suites": [],
         "negotiated_cipher_suite": None,
+
         "key_exchange": None,
+
         "handshake_types": [],
+
         "supported_groups": [],
+
         "key_exchange_groups": [],
         "key_exchange_group": None,
+
         "forward_secrecy": None,
     }
 
@@ -251,8 +382,13 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         ],
     )
 
-    result["tls_detected"] = len(tls_rows) > 0
-    result["tls_packet_count"] = len(tls_rows)
+    result["tls_detected"] = (
+        len(tls_rows) > 0
+    )
+
+    result["tls_packet_count"] = (
+        len(tls_rows)
+    )
 
     if not tls_rows:
         return result
@@ -270,17 +406,20 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
 
         raw_value = row[1].strip()
 
-        for version in _split_values(raw_value):
-            version_counter[version] += 1
+        for version in _split_values(
+            raw_value
+        ):
 
-    result["tls_versions"] = [
-        {
-            "value": _tls_version_name(version),
-            "raw_value": version,
-            "packet_count": count,
-        }
-        for version, count in version_counter.items()
-    ]
+            version_counter[
+                version
+            ] += 1
+
+    result["tls_versions"] = (
+        _counter_to_list(
+            version_counter,
+            _tls_version_name,
+        )
+    )
 
     # ==================================================
     # CIPHER SUITES
@@ -306,17 +445,20 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         if not row:
             continue
 
-        for value in _split_values(row[0]):
-            cipher_counter[value] += 1
+        for value in _split_values(
+            row[0]
+        ):
 
-    result["cipher_suites"] = [
-        {
-            "value": _cipher_name(value),
-            "raw_value": value,
-            "packet_count": count,
-        }
-        for value, count in cipher_counter.items()
-    ]
+            cipher_counter[
+                value
+            ] += 1
+
+    result["cipher_suites"] = (
+        _counter_to_list(
+            cipher_counter,
+            _cipher_name,
+        )
+    )
 
     # ==================================================
     # HANDSHAKE TYPES
@@ -342,15 +484,21 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         if not row:
             continue
 
-        for value in _split_values(row[0]):
-            handshake_counter[value] += 1
+        for value in _split_values(
+            row[0]
+        ):
+
+            handshake_counter[
+                value
+            ] += 1
 
     result["handshake_types"] = [
         {
             "value": value,
             "packet_count": count,
         }
-        for value, count in handshake_counter.items()
+        for value, count
+        in handshake_counter.items()
     ]
 
     # ==================================================
@@ -395,45 +543,60 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
 
         negotiated_version = None
 
+        #
+        # TLS 1.3:
+        #
+        # The ServerHello legacy version may still be
+        # 0x0303 (TLS 1.2), while the actual negotiated
+        # version is carried in supported_versions.
+        #
         if supported_version.strip():
 
-            negotiated_version = _extract_last_value(
-                supported_version
+            negotiated_version = (
+                _extract_last_value(
+                    supported_version
+                )
             )
 
         elif handshake_version.strip():
 
-            negotiated_version = _extract_last_value(
-                handshake_version
+            negotiated_version = (
+                _extract_last_value(
+                    handshake_version
+                )
             )
 
         if negotiated_version:
 
-            result["negotiated_tls_version"] = (
-                _tls_version_name(
-                    negotiated_version
-                )
+            result[
+                "negotiated_tls_version"
+            ] = _tls_version_name(
+                negotiated_version
             )
 
         # ----------------------------------------------
         # NEGOTIATED CIPHER
         # ----------------------------------------------
 
-        negotiated_cipher = _extract_last_value(
-            cipher
+        negotiated_cipher = (
+            _extract_last_value(
+                cipher
+            )
         )
 
         if negotiated_cipher:
 
-            result["negotiated_cipher_suite"] = (
-                _cipher_name(
-                    negotiated_cipher
-                )
+            result[
+                "negotiated_cipher_suite"
+            ] = _cipher_name(
+                negotiated_cipher
             )
 
             result["key_exchange"] = (
                 _key_exchange_from_cipher(
-                    result["negotiated_cipher_suite"]
+                    result[
+                        "negotiated_cipher_suite"
+                    ]
                 )
             )
 
@@ -441,16 +604,18 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         # SELECTED KEY SHARE GROUP
         # ----------------------------------------------
 
-        selected_group = _extract_last_value(
-            key_share_group
+        selected_group = (
+            _extract_last_value(
+                key_share_group
+            )
         )
 
         if selected_group:
 
-            result["key_exchange_group"] = (
-                _group_name(
-                    selected_group
-                )
+            result[
+                "key_exchange_group"
+            ] = _group_name(
+                selected_group
             )
 
     # ==================================================
@@ -477,17 +642,20 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         if not row:
             continue
 
-        for value in _split_values(row[0]):
-            supported_group_counter[value] += 1
+        for value in _split_values(
+            row[0]
+        ):
 
-    result["supported_groups"] = [
-        {
-            "value": _group_name(value),
-            "raw_value": value,
-            "packet_count": count,
-        }
-        for value, count in supported_group_counter.items()
-    ]
+            supported_group_counter[
+                value
+            ] += 1
+
+    result["supported_groups"] = (
+        _counter_to_list(
+            supported_group_counter,
+            _group_name,
+        )
+    )
 
     # ==================================================
     # KEY SHARE GROUPS
@@ -513,52 +681,75 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         if not row:
             continue
 
-        for value in _split_values(row[0]):
-            key_share_counter[value] += 1
+        for value in _split_values(
+            row[0]
+        ):
 
-    result["key_exchange_groups"] = [
-        {
-            "value": _group_name(value),
-            "raw_value": value,
-            "packet_count": count,
-        }
-        for value, count in key_share_counter.items()
-    ]
+            key_share_counter[
+                value
+            ] += 1
+
+    result["key_exchange_groups"] = (
+        _counter_to_list(
+            key_share_counter,
+            _group_name,
+        )
+    )
 
     # ==================================================
     # FALLBACK KEY EXCHANGE GROUP
     # ==================================================
 
     #
-    # A key-share group is useful supporting evidence,
-    # but it must NOT independently prove forward secrecy.
+    # Prefer the explicitly selected group from ServerHello.
+    #
+    # If it was not available, use the most frequently observed
+    # key-share group as supporting evidence.
     #
 
-    if result["key_exchange_group"] is None:
+    if (
+        result["key_exchange_group"]
+        is None
+        and key_share_counter
+    ):
 
-        if key_share_counter:
+        selected_group = (
+            key_share_counter
+            .most_common(1)[0][0]
+        )
 
-            selected_group = (
-                key_share_counter
-                .most_common(1)[0][0]
-            )
-
-            result["key_exchange_group"] = (
-                _group_name(
-                    selected_group
-                )
-            )
+        result[
+            "key_exchange_group"
+        ] = _group_name(
+            selected_group
+        )
 
     # ==================================================
     # FORWARD SECRECY
     # ==================================================
 
     negotiated_version = (
-        result["negotiated_tls_version"]
+        result[
+            "negotiated_tls_version"
+        ]
+    )
+
+    negotiated_cipher = (
+        result[
+            "negotiated_cipher_suite"
+        ]
     )
 
     key_exchange = (
-        result["key_exchange"]
+        result[
+            "key_exchange"
+        ]
+    )
+
+    key_exchange_group = (
+        result[
+            "key_exchange_group"
+        ]
     )
 
     # --------------------------------------------------
@@ -566,13 +757,29 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
     # --------------------------------------------------
 
     #
-    # A successfully negotiated TLS 1.3 connection
-    # provides forward secrecy through its key exchange.
+    # TLS 1.3 uses ephemeral key exchange.
+    #
+    # We require both:
+    #
+    #   1. negotiated TLS 1.3
+    #   2. evidence of a selected key-share group
+    #
+    # before reporting forward secrecy as True.
     #
 
     if negotiated_version == "TLS 1.3":
 
-        result["forward_secrecy"] = True
+        if key_exchange_group:
+
+            result[
+                "forward_secrecy"
+            ] = True
+
+        else:
+
+            result[
+                "forward_secrecy"
+            ] = None
 
     # --------------------------------------------------
     # TLS 1.2 / older: ECDHE or DHE
@@ -590,7 +797,9 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         }
     ):
 
-        result["forward_secrecy"] = True
+        result[
+            "forward_secrecy"
+        ] = True
 
     # --------------------------------------------------
     # TLS 1.2 / older: RSA key exchange
@@ -605,25 +814,36 @@ def analyze_tls_packets(pcap_path, tcp_stream=None):
         and key_exchange == "RSA"
     ):
 
-        result["forward_secrecy"] = False
+        result[
+            "forward_secrecy"
+        ] = False
 
     # --------------------------------------------------
-    # Unknown / incomplete handshake
+    # TLS 1.3 cipher but missing version evidence
+    # --------------------------------------------------
+
+    elif _is_tls13_cipher(
+        negotiated_cipher
+    ):
+
+        #
+        # Seeing a TLS 1.3 cipher is useful evidence,
+        # but without a confirmed negotiated TLS version
+        # we avoid overstating the conclusion.
+        #
+
+        result[
+            "forward_secrecy"
+        ] = None
+
+    # --------------------------------------------------
+    # Insufficient evidence
     # --------------------------------------------------
 
     else:
 
-        #
-        # Do not infer forward secrecy from merely seeing
-        # supported groups or key-share groups.
-        #
-        # None means:
-        #
-        # "TLS was observed, but there is insufficient
-        # negotiated-handshake evidence to determine
-        # forward secrecy."
-        #
-
-        result["forward_secrecy"] = None
+        result[
+            "forward_secrecy"
+        ] = None
 
     return result

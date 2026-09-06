@@ -1,5 +1,12 @@
-from app.analyzer.tls_analyzer import analyze_tls_packets
+import sys
+from pathlib import Path
 
+sys.path.insert(
+    0,
+    str(Path(__file__).resolve().parents[2])
+)
+
+from app.analyzer.tls_analyzer import analyze_tls_packets
 
 PCAP_PATH = r".\pcaps\smtp_starttls_test.pcapng"
 
@@ -13,7 +20,15 @@ def main():
     print("\nReading PCAP:")
     print(f"  {PCAP_PATH}")
 
-    result = analyze_tls_packets(PCAP_PATH)
+    # Stream 4 is the SMTP STARTTLS lab session.
+    stream_id = 4
+
+    print(f"\nAnalyzing TCP stream: {stream_id}")
+
+    result = analyze_tls_packets(
+        PCAP_PATH,
+        tcp_stream=stream_id
+    )
 
     print("\nTLS Analysis")
     print("-" * 70)
@@ -30,6 +45,9 @@ def main():
     print("\nNegotiated cipher suite:")
     print(f"  {result['negotiated_cipher_suite']}")
 
+    print("\nKey exchange:")
+    print(f"  {result['key_exchange']}")
+
     print("\nKey exchange group:")
     print(f"  {result['key_exchange_group']}")
 
@@ -44,6 +62,16 @@ def main():
     print("\nObserved cipher suites:")
 
     for item in result["cipher_suites"]:
+        print(f"  {item}")
+
+    print("\nHandshake types:")
+
+    for item in result["handshake_types"]:
+        print(f"  {item}")
+
+    print("\nSupported groups:")
+
+    for item in result["supported_groups"]:
         print(f"  {item}")
 
     print("\nObserved key exchange groups:")
